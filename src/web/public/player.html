@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <title>مشغل الفيديو — Movies Hub</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link  href="https://vjs.zencdn.net/8.23.6/video-js.css" rel="stylesheet">
+  <script src="https://vjs.zencdn.net/8.23.6/video.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: #000; color: #eee; height: 100dvh;
+      font-family: system-ui, -apple-system, sans-serif;
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    #playerHeader {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; flex-shrink: 0;
+      background: linear-gradient(180deg,rgba(0,0,0,.9),transparent);
+      position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+      transition: opacity .3s;
+    }
+    #playerHeader.hidden { opacity: 0; pointer-events: none; }
+    .back-btn {
+      display: flex; align-items: center; padding: 7px;
+      background: rgba(255,255,255,.12); border-radius: 50%;
+      color: #fff; transition: background .15s; border: none; cursor: pointer;
+    }
+    .back-btn:active { background: rgba(255,255,255,.25); }
+    #playerTitle { flex: 1; font-size: .9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    #videoWrap {
+      flex: 1; position: relative; background: #000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #videoWrap.fs-fallback { position: fixed; inset: 0; z-index: 9999; }
+
+    .video-js { width: 100% !important; height: 100% !important; }
+    .vjs-big-play-button {
+      left: 50% !important; top: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      border-radius: 50% !important;
+      width: 64px !important; height: 64px !important;
+      line-height: 64px !important;
+      background: rgba(124,92,252,.85) !important;
+      border: none !important; box-shadow: 0 4px 20px rgba(124,92,252,.4) !important;
+    }
+    .vjs-control-bar { background: linear-gradient(0deg,rgba(0,0,0,.85),transparent) !important; padding: 0 6px !important; }
+
+    #embedFrame { width: 100%; height: 100%; border: none; background: #000; position: absolute; inset: 0; }
+
+    #loader {
+      position: absolute; inset: 0; background: #000;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10; transition: opacity .3s;
+    }
+    #loader.gone { opacity: 0; pointer-events: none; }
+    .ring {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 3px solid #7c5cfc; border-top-color: transparent;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #errorScreen {
+      display: none; flex-direction: column; align-items: center;
+      justify-content: center; gap: 14px; padding: 28px;
+      text-align: center; position: absolute; inset: 0; z-index: 11;
+    }
+    #errorScreen.show { display: flex; }
+    #errorScreen .eicon { font-size: 3rem; }
+    #errorScreen h2 { font-size: 1rem; }
+    #errorScreen p { font-size: .85rem; color: #aaa; max-width: 300px; line-height: 1.5; }
+    .err-btn {
+      padding: 10px 24px; border-radius: 50px; font-size: .9rem; font-weight: 600;
+      border: none; cursor: pointer;
+    }
+    .err-primary { background: #7c5cfc; color: #fff; }
+    .err-secondary { background: rgba(255,255,255,.1); color: #eee; }
+    .err-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+    #fsFallbackBtn {
+      position: absolute; bottom: 60px; right: 12px; z-index: 15;
+      background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.2);
+      border-radius: 8px; width: 38px; height: 38px;
+      display: none; align-items: center; justify-content: center;
+      font-size: 1rem; color: #fff; cursor: pointer; border: none;
+    }
+    #fsFallbackBtn.show { display: flex; }
+
+    /* Source list for fallback */
+    #sourceList {
+      display: none; flex-direction: column; gap: 8px; width: 100%; max-width: 340px;
+    }
+    #sourceList.show { display: flex; }
+    .src-btn {
+      padding: 12px 18px; border-radius: 10px; text-align: right;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+      color: #eee; font-size: .88rem; cursor: pointer;
+    }
+    .src-btn:active { background: rgba(124,92,252,.3); }
+    .src-btn .src-type { font-size: .7rem; color: #888; margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<div id="playerHeader">
+  <button class="back-btn" id="backBtn" aria-label="رجوع">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <path d="M19 12H5M12 5l-7 7 7 7"/>
+    </svg>
+  </button>
+  <div id="playerTitle">⏳ جاري التحميل...</div>
+</div>
+
+<div id="videoWrap">
+  <div id="loader"><div class="ring"></div></div>
+
+  <div id="errorScreen">
+    <div class="eicon" id="errIcon">⚠️</div>
+    <h2 id="errTitle">تعذّر التشغيل</h2>
+    <p id="errMsg">حدث خطأ أثناء تحميل الفيديو</p>
+    <div id="sourceList"></div>
+    <div class="err-btns">
+      <button class="err-btn err-primary"   id="retryBtn"  style="display:none">🔄 إعادة المحاولة</button>
+      <button class="err-btn err-secondary" id="backErrBtn">🔙 رجوع</button>
+    </div>
+  </div>
+
+  <button id="fsFallbackBtn" title="ملء الشاشة">⛶</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const tg = window.Telegram?.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  // ── Parse URL parameters ───────────────────────────────────────────────────
+  const params = new URLSearchParams(location.search);
+
+  // Required params passed from app.js
+  const srcUrl    = params.get('srcUrl')    || '';
+  const srcType   = (params.get('srcType') || '').toLowerCase().trim();   // m3u8|webm|mov|embed|mp4
+  const playerMode = (params.get('playerMode') || srcType).toLowerCase().trim(); // explicit player mode
+  const srcKind   = params.get('srcKind')   || 'both';
+  const srcTitle  = params.get('srcTitle')  || '';
+  const contentType = params.get('type')    || 'movie';   // movie|serie|episode
+  const contentId   = params.get('id')      || '';
+
+  // All sources for fallback cycling (JSON array in param)
+  let allSources = [];
+  try { allSources = JSON.parse(decodeURIComponent(params.get('sources') || '[]')); } catch (_) {}
+  let currentSourceIdx = parseInt(params.get('srcIdx') || '0', 10);
+
+  const titleEl    = document.getElementById('playerTitle');
+  const loader     = document.getElementById('loader');
+  const errorSc    = document.getElementById('errorScreen');
+  const errIcon    = document.getElementById('errIcon');
+  const errTitle   = document.getElementById('errTitle');
+  const errMsg     = document.getElementById('errMsg');
+  const retryBtn   = document.getElementById('retryBtn');
+  const backErrBtn = document.getElementById('backErrBtn');
+  const sourceList = document.getElementById('sourceList');
+  const wrap       = document.getElementById('videoWrap');
+  const fsFallBtn  = document.getElementById('fsFallbackBtn');
+  const header     = document.getElementById('playerHeader');
+
+  titleEl.textContent = srcTitle || (contentType === 'episode' ? 'مشاهدة الحلقة' : 'مشاهدة الفيلم');
+
+  document.getElementById('backBtn').addEventListener('click', goBack);
+  backErrBtn.addEventListener('click', goBack);
+
+  function goBack() {
+    if (history.length > 1) history.back(); else location.href = '/app';
+  }
+
+  // Auto-hide header
+  let hideTimer;
+  function resetHeader() {
+    header.classList.remove('hidden');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => header.classList.add('hidden'), 4000);
+  }
+  document.addEventListener('touchstart', resetHeader);
+  document.addEventListener('click',      resetHeader);
+  resetHeader();
+
+  function hideLoader() { loader.classList.add('gone'); }
+
+  /**
+   * showError — display error with correct message based on cause
+   * @param {string} title
+   * @param {string} detail
+   * @param {boolean} show403Message - true when HTTP 403 is the cause
+   */
+  function showError(title, detail, is403) {
+    hideLoader();
+    errTitle.textContent = title  || 'تعذّر التشغيل';
+    errMsg.textContent   = detail || 'حدث خطأ أثناء تحميل الفيديو';
+
+    // Show fallback source list if we have more sources
+    const remaining = allSources.filter((_, i) => i !== currentSourceIdx);
+    if (remaining.length > 0) {
+      sourceList.innerHTML = '<div style="color:#888;font-size:.78rem;margin-bottom:6px">جرّب مصدرًا آخر:</div>';
+      remaining.slice(0, 4).forEach((src, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'src-btn';
+        const label = src.quality || src.title || src.type || 'مصدر';
+        const mode  = src.playerMode || src.type || '?';
+        btn.innerHTML = `${label}<div class="src-type">${mode.toUpperCase()} · ${src.kind}</div>`;
+        btn.addEventListener('click', () => {
+          const origIdx = allSources.indexOf(src);
+          navigateToSource(origIdx >= 0 ? origIdx : currentSourceIdx + i + 1);
+        });
+        sourceList.appendChild(btn);
+      });
+      sourceList.classList.add('show');
+    }
+
+    errIcon.textContent = is403 ? '🚫' : '⚠️';
+    errorSc.classList.add('show');
+    retryBtn.style.display = is403 ? 'none' : 'inline-block';
+    retryBtn.onclick = () => location.reload();
+
+    // Log to console for debugging (no secrets)
+    try {
+      const host = new URL(srcUrl).hostname;
+      console.warn(`[PLAYER ERROR] mode=${playerMode} host=${host} 403=${is403} detail=${detail}`);
+    } catch (_) {}
+  }
+
+  function navigateToSource(idx) {
+    const src = allSources[idx];
+    if (!src) return;
+    const p = new URLSearchParams({
+      srcUrl:     src.url,
+      srcType:    src.type    || '',
+      playerMode: src.playerMode || src.type || '',
+      srcKind:    src.kind    || 'both',
+      srcTitle:   src.title   || '',
+      type:       contentType,
+      id:         contentId,
+      srcIdx:     String(idx),
+      sources:    encodeURIComponent(JSON.stringify(allSources)),
+    });
+    location.href = `/player.html?${p.toString()}`;
+  }
+
+  // Fullscreen
+  function doFs(el) {
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+    if (fn) {
+      fn.call(el).then(() => {
+        if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {});
+      }).catch(() => fallbackFs());
+    } else { fallbackFs(); }
+  }
+  function fallbackFs() {
+    wrap.classList.add('fs-fallback');
+    header.classList.add('hidden');
+    if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {});
+  }
+  function exitFs() {
+    wrap.classList.remove('fs-fallback');
+    if (screen.orientation?.unlock) screen.orientation.unlock();
+    resetHeader();
+  }
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) exitFs(); });
+  fsFallBtn.addEventListener('click', () => doFs(wrap));
+
+  // ── No URL ─────────────────────────────────────────────────────────────────
+  if (!srcUrl) { showError('لا يوجد مصدر', 'لم يتم تحديد مصدر الفيديو', false); return; }
+
+  // ── Determine actual player mode ────────────────────────────────────────────
+  // playerMode is passed explicitly from app.js (= src.playerMode from resolver)
+  // This already accounts for embed URLs with type='m3u8'
+  const mode = playerMode || srcType;
+
+  console.log(`[PLAYER] PLAYER MODE: ${mode} | type=${srcType} | kind=${srcKind}`);
+  try { console.log(`[PLAYER] SOURCE URL HOST: ${new URL(srcUrl).hostname}`); } catch (_) {}
+
+  // ── EMBED mode ─────────────────────────────────────────────────────────────
+  if (mode === 'embed' || mode === 'iframe') {
+    console.log('[PLAYER] MODE: EMBED → iframe');
+    hideLoader();
+    const iframe = document.createElement('iframe');
+    iframe.id = 'embedFrame';
+    iframe.src = srcUrl;
+    iframe.setAttribute('allowfullscreen', '');
+    iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
+    iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+    // iframe errors are hard to catch — show fallback after timeout
+    const iframeTimeout = setTimeout(() => {
+      if (!iframe.contentDocument) {
+        // still might be working — don't error yet
+      }
+    }, 8000);
+    iframe.onload = () => clearTimeout(iframeTimeout);
+    wrap.appendChild(iframe);
+    fsFallBtn.classList.add('show');
+    return;
+  }
+
+  // ── WEBM mode ──────────────────────────────────────────────────────────────
+  if (mode === 'webm') {
+    console.log('[PLAYER] MODE: VIDEO → video/webm');
+    const vid = document.createElement('video');
+    vid.controls = true;
+    vid.autoplay = true;
+    vid.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+    vid.setAttribute('playsinline', '');
+    vid.setAttribute('webkit-playsinline', '');
+    const src = document.createElement('source');
+    src.src  = srcUrl;
+    src.type = 'video/webm';
+    vid.appendChild(src);
+    vid.oncanplay = () => hideLoader();
+    vid.onerror   = () => showError('تعذّر التشغيل', 'صيغة WebM غير مدعومة في هذا المتصفح\nجرّب مصدرًا آخر.', false);
+    wrap.appendChild(vid);
+    fsFallBtn.classList.add('show');
+    fsFallBtn.addEventListener('click', () => doFs(vid));
+    return;
+  }
+
+  // ── MOV mode ───────────────────────────────────────────────────────────────
+  if (mode === 'mov') {
+    console.log('[PLAYER] MODE: VIDEO → video/quicktime (MOV — limited browser support)');
+    const vid = document.createElement('video');
+    vid.controls = true;
+    vid.autoplay = true;
+    vid.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+    vid.setAttribute('playsinline', '');
+    vid.setAttribute('webkit-playsinline', '');
+    const src = document.createElement('source');
+    src.src  = srcUrl;
+    src.type = 'video/quicktime';
+    vid.appendChild(src);
+    // Also try mp4 fallback for MOV
+    const src2 = document.createElement('source');
+    src2.src  = srcUrl;
+    src2.type = 'video/mp4';
+    vid.appendChild(src2);
+    vid.oncanplay = () => hideLoader();
+    vid.onerror   = () => showError(
+      'صيغة MOV غير مدعومة',
+      'صيغة MOV غير مدعومة في هذا المتصفح.\nجرّب مصدرًا آخر من القائمة.',
+      false
+    );
+    wrap.appendChild(vid);
+    fsFallBtn.classList.add('show');
+    fsFallBtn.addEventListener('click', () => doFs(vid));
+    return;
+  }
+
+  // ── M3U8 / HLS mode ────────────────────────────────────────────────────────
+  // Default for m3u8 and mp4 — uses video.js with VHS/HLS support
+  console.log(`[PLAYER] MODE: HLS/VIDEO via video.js → ${mode}`);
+
+  const MIME_MAP = {
+    'm3u8': 'application/x-mpegURL',
+    'hls':  'application/x-mpegURL',
+    'mp4':  'video/mp4',
+    'ogg':  'video/ogg',
+  };
+  const mime = MIME_MAP[mode] || 'video/mp4';
+
+  const videoEl = document.createElement('video');
+  videoEl.id = 'mainVideo';
+  videoEl.className = 'video-js vjs-default-skin vjs-big-play-centered';
+  videoEl.setAttribute('playsinline', '');
+  videoEl.setAttribute('webkit-playsinline', '');
+  videoEl.setAttribute('preload', 'auto');
+  videoEl.style.cssText = 'width:100%;height:100%;';
+  wrap.appendChild(videoEl);
+  fsFallBtn.classList.add('show');
+
+  const player = videojs('mainVideo', {
+    autoplay:   true,
+    fluid:      false,
+    fill:       true,
+    responsive: false,
+    html5: {
+      vhs: { overrideNative: !videojs.browser.IS_SAFARI },
+      nativeVideoTracks: false,
+      nativeAudioTracks: false,
+      nativeTextTracks:  false,
+    },
+    controlBar: {
+      playToggle:             true,
+      volumePanel:            { inline: false },
+      currentTimeDisplay:     true,
+      timeDivider:            true,
+      durationDisplay:        true,
+      progressControl:        true,
+      remainingTimeDisplay:   false,
+      fullscreenToggle:       true,
+      playbackRateMenuButton: true,
+    },
+    playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+  });
+
+  player.src({ src: srcUrl, type: mime });
+  player.ready(() => hideLoader());
+
+  player.on('error', () => {
+    const e = player.error();
+    // code 4 = MEDIA_ERR_SRC_NOT_SUPPORTED
+    // This can be caused by: CORS rejection (403), unsupported codec, bad URL
+    const is403like = e?.code === 4;
+    const msgs = {
+      1: 'تم إلغاء عملية التحميل',
+      2: 'تعذّر تحميل الفيديو — تحقق من اتصالك',
+      3: 'الفيديو تالف أو غير مكتمل',
+      4: 'السيرفر رفض الاتصال أو الصيغة غير مدعومة',
+    };
+    const detail = e ? (msgs[e.code] || e.message || 'خطأ غير معروف') : 'خطأ غير معروف';
+    console.warn(`[PLAYER ERROR] vjsCode=${e?.code} mode=${mode}`);
+    showError('تعذّر التشغيل', detail + '\nجرّب مصدرًا آخر من القائمة أدناه.', is403like);
+  });
+
+  player.on('fullscreenchange', () => {
+    if (player.isFullscreen()) {
+      if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {});
+    } else {
+      if (screen.orientation?.unlock) screen.orientation.unlock();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

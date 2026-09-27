@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f0f13">
+  <title>درامي — الأفلام والمسلسلات</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────── -->
+<header class="app-header">
+  <div class="header-inner">
+    <div class="header-logo">🎬 <span>درامي</span></div>
+    <button class="search-btn" id="headerSearchBtn" aria-label="بحث">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- ── SEARCH OVERLAY ─────────────────────────────── -->
+<div class="search-overlay" id="searchOverlay" aria-hidden="true">
+  <div class="search-bar-wrap">
+    <button class="search-close" id="searchClose" aria-label="إغلاق">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 5l-7 7 7 7"/>
+      </svg>
+    </button>
+    <input class="search-input" id="searchInput" type="search" placeholder="ابحث عن فيلم أو مسلسل..." autocomplete="off">
+  </div>
+  <div class="search-results">
+    <div class="search-empty" id="searchEmpty" hidden>
+      <div class="empty-icon">🔍</div>
+      <p>لا توجد نتائج</p>
+    </div>
+    <div class="card-grid" id="searchGrid"></div>
+  </div>
+</div>
+
+<!-- ── PAGES ──────────────────────────────────────── -->
+<main class="app-main">
+
+  <!-- HOME -->
+  <div class="page active" id="pageHome">
+    <section class="hero-section" id="heroSection">
+      <div class="skeleton" style="height:100%;border-radius:0"></div>
+    </section>
+    <section class="content-section">
+      <h2 class="section-title">🆕 أحدث الأفلام</h2>
+      <div class="row-scroll" id="latestMoviesRow"></div>
+    </section>
+    <section class="content-section">
+      <h2 class="section-title">📺 أحدث المسلسلات</h2>
+      <div class="row-scroll" id="latestSeriesRow"></div>
+    </section>
+    <section class="content-section">
+      <h2 class="section-title">🎲 اكتشف فيلمًا</h2>
+      <div class="row-scroll" id="randomMoviesRow"></div>
+    </section>
+  </div>
+
+  <!-- MOVIES -->
+  <div class="page" id="pageMovies">
+    <div class="page-header"><h1 class="page-title">🎬 الأفلام</h1></div>
+    <div class="card-grid" id="moviesGrid"></div>
+  </div>
+
+  <!-- SERIES -->
+  <div class="page" id="pageSeries">
+    <div class="page-header"><h1 class="page-title">📺 المسلسلات</h1></div>
+    <div class="card-grid" id="seriesGrid"></div>
+  </div>
+
+  <!-- SEARCH PAGE -->
+  <div class="page" id="pageSearch">
+    <div class="page-search-wrap">
+      <input class="search-input" id="pageSearchInput" type="search" placeholder="ابحث..." autocomplete="off">
+    </div>
+    <div class="search-empty" id="pageSearchEmpty" hidden>
+      <div class="empty-icon">🔍</div>
+      <p>اكتب للبحث</p>
+    </div>
+    <div class="card-grid" id="pageSearchGrid"></div>
+  </div>
+
+  <!-- FAVORITES -->
+  <div class="page" id="pageFavorites">
+    <div class="page-header"><h1 class="page-title">❤️ المفضلة</h1></div>
+    <div class="empty-state" id="favEmpty" hidden>
+      <div class="empty-icon">💔</div>
+      <p>لم تضف أي محتوى بعد</p>
+    </div>
+    <div class="card-grid" id="favoritesGrid"></div>
+  </div>
+
+</main>
+
+<!-- ── DETAIL SHEET ────────────────────────────────── -->
+<div class="detail-sheet" id="detailSheet" aria-hidden="true">
+  <div class="detail-backdrop" id="detailBackdrop"></div>
+  <div class="detail-panel">
+    <button class="detail-close" id="detailClose" aria-label="إغلاق">✕</button>
+    <div class="detail-cover-wrap">
+      <img class="detail-cover" id="detailCover" src="" alt="" loading="lazy" onerror="this.style.display='none'">
+      <div class="detail-cover-grad"></div>
+    </div>
+    <div class="detail-body">
+      <img class="detail-poster" id="detailPoster" src="" alt="" loading="lazy" onerror="this.style.display='none'">
+      <div class="detail-info">
+        <h2 class="detail-title" id="detailTitle"></h2>
+        <div class="detail-meta"  id="detailMeta"></div>
+        <p class="detail-desc"    id="detailDesc"></p>
+        <div class="detail-actions" id="detailActions"></div>
+        <div class="seasons-wrap"   id="seasonsWrap" hidden></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── QUALITY SHEET ───────────────────────────────── -->
+<div class="quality-sheet" id="qualitySheet" aria-hidden="true">
+  <div class="sheet-overlay" id="qualityOverlay"></div>
+  <div class="sheet-panel">
+    <div class="sheet-handle"></div>
+    <h3 class="sheet-title">اختر الجودة</h3>
+    <div class="quality-list" id="qualityList"></div>
+    <button class="sheet-cancel" id="qualityCancel">إلغاء</button>
+  </div>
+</div>
+
+<!-- ── BOTTOM NAV ─────────────────────────────────── -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-page="pageHome" aria-label="الرئيسية">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+    <span>الرئيسية</span>
+  </button>
+  <button class="nav-btn" data-page="pageMovies" aria-label="الأفلام">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <rect x="2" y="2" width="20" height="20" rx="2.18"/>
+      <line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/>
+      <line x1="2" y1="12" x2="22" y2="12"/>
+    </svg>
+    <span>أفلام</span>
+  </button>
+  <button class="nav-btn" data-page="pageSeries" aria-label="المسلسلات">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/>
+    </svg>
+    <span>مسلسلات</span>
+  </button>
+  <button class="nav-btn" data-page="pageSearch" aria-label="البحث">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <span>بحث</span>
+  </button>
+  <button class="nav-btn" data-page="pageFavorites" aria-label="المفضلة">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+    </svg>
+    <span>المفضلة</span>
+  </button>
+</nav>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
